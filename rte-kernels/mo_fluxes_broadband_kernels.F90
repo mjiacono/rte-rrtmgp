@@ -21,15 +21,71 @@ module mo_fluxes_broadband_kernels
   public :: sum_broadband, net_broadband
 
   interface net_broadband
-    !! Interface for computing net flux
+    ! Interface for computing net flux
     module procedure net_broadband_full, net_broadband_precalc
   end interface net_broadband
+
+  ! ----------------------------------------------------------------------------
+  !>
+  !> Spectral reduction over all points
+  !>
+  interface
+  module subroutine sum_broadband(ncol, nlev, ngpt, spectral_flux, broadband_flux) bind(C, name="rte_sum_broadband")
+    integer,                               intent(in ) :: ncol, nlev, ngpt
+      !! Array sizes
+    real(wp), dimension(ncol, nlev, ngpt), intent(in ) :: spectral_flux
+      !! Spectrally-resolved flux
+    real(wp), dimension(ncol, nlev),       intent(out) :: broadband_flux
+      !! Sum of spectrally-resolved flux over `ngpt`
+  end subroutine sum_broadband
+  end interface 
+  ! ----------------------------------------------------------------------------
+  !>
+  !> Spectral reduction over all points for net flux
+  !>
+  interface
+  module subroutine net_broadband_full(ncol, nlev, ngpt, spectral_flux_dn, spectral_flux_up, broadband_flux_net) &
+    bind(C, name="rte_net_broadband_full")
+    integer,                               intent(in ) :: ncol, nlev, ngpt
+      !! Array sizes
+    real(wp), dimension(ncol, nlev, ngpt), intent(in ) :: spectral_flux_dn, spectral_flux_up
+      !! Spectrally-resolved flux up and down
+    real(wp), dimension(ncol, nlev),       intent(out) :: broadband_flux_net
+      !! Net (down minus up) summed over `ngpt`
+
+ end subroutine net_broadband_full
+ end interface 
+  ! ----------------------------------------------------------------------------
+  !>
+  !> Net flux when bradband flux up and down are already available
+  !>
+  interface
+  module subroutine net_broadband_precalc(ncol, nlev, flux_dn, flux_up, broadband_flux_net) &
+    bind(C, name="rte_net_broadband_precalc")
+    integer,                         intent(in ) :: ncol, nlev
+      !! Array sizes
+    real(wp), dimension(ncol, nlev), intent(in ) :: flux_dn, flux_up
+      !! Broadband downward and upward fluxes
+    real(wp), dimension(ncol, nlev), intent(out) :: broadband_flux_net
+      !! Net (down minus up)
+  end subroutine net_broadband_precalc
+  end interface
+  ! ----------------------------------------------------------------------------
+end module mo_fluxes_broadband_kernels
+! ===============================================================================
+! ===============================================================================
+
+! ===============================================================================
+! ===============================================================================
+submodule (mo_fluxes_broadband_kernels) mo_fluxes_broadband_kernels_imp
+  use mo_rte_kind, only: wp
+  implicit none
 contains
   ! ----------------------------------------------------------------------------
   !>
   !> Spectral reduction over all points
   !>
-  subroutine sum_broadband(ncol, nlev, ngpt, spectral_flux, broadband_flux) bind(C, name="rte_sum_broadband")
+  module subroutine sum_broadband(ncol, nlev, ngpt, spectral_flux, broadband_flux) bind(C, name="rte_sum_broadband")
     integer,                               intent(in ) :: ncol, nlev, ngpt
       !! Array sizes
     real(wp), dimension(ncol, nlev, ngpt), intent(in ) :: spectral_flux
@@ -63,7 +119,7 @@ contains
   !>
   !> Spectral reduction over all points for net flux
   !>
-  subroutine net_broadband_full(ncol, nlev, ngpt, spectral_flux_dn, spectral_flux_up, broadband_flux_net) &
+  module subroutine net_broadband_full(ncol, nlev, ngpt, spectral_flux_dn, spectral_flux_up, broadband_flux_net) &
     bind(C, name="rte_net_broadband_full")
     integer,                               intent(in ) :: ncol, nlev, ngpt
       !! Array sizes
@@ -104,7 +160,7 @@ contains
   !>
   !> Net flux when bradband flux up and down are already available
   !>
-  subroutine net_broadband_precalc(ncol, nlev, flux_dn, flux_up, broadband_flux_net) &
+  module subroutine net_broadband_precalc(ncol, nlev, flux_dn, flux_up, broadband_flux_net)  &
     bind(C, name="rte_net_broadband_precalc")
     integer,                         intent(in ) :: ncol, nlev
       !! Array sizes
@@ -127,4 +183,4 @@ contains
     !$omp target exit data map(release:flux_dn, flux_up) map(from:broadband_flux_net)
   end subroutine net_broadband_precalc
   ! ----------------------------------------------------------------------------
-end module mo_fluxes_broadband_kernels
+end submodule mo_fluxes_broadband_kernels_imp
