@@ -13,7 +13,7 @@ module mo_load_cloud_coefficients
 
   implicit none
   private
-  public :: load_cld_lutcoeff
+  public :: load_cld_lutcoeff, load_cld_lutcoeff_solarj
   ! ----------------------------------------------------------------------------------
 
 contains
@@ -104,6 +104,77 @@ contains
 
     ncid = nf90_close(ncid)
   end subroutine load_cld_lutcoeff
+
+  !--------------------------------------------------------------------------------------------------------------------
+  !
+  ! read cloud optical property LUT coefficients for SolarJ model from NetCDF file
+  !
+  subroutine load_cld_lutcoeff_solarj(cloud_spec, cld_coeff_file)
+    class(ty_cloud_optics_rrtmgp),         intent(inout) :: cloud_spec
+    character(len=*),                      intent(in   ) :: cld_coeff_file
+    ! -----------------
+    ! Local variables
+    integer :: ncid, nband, nrghice, nsize_liq, nsize_ice, nphase
+
+    ! Lookup table interpolation constants
+    real(wp) :: radliq_lwr_sj          ! liquid particle size lower bound for interpolation
+    real(wp) :: radliq_upr_sj          ! liquid particle size upper bound for interpolation
+    real(wp) :: diamice_lwr_sj         ! ice particle size lower bound for interpolation
+    real(wp) :: diamice_upr_sj         ! ice particle size upper bound for interpolation
+    ! LUT coefficients
+    real(wp), dimension(:,:),     allocatable :: extliq_sj   ! extinction efficiency: liquid
+    real(wp), dimension(:,:),     allocatable :: ssaliq_sj   ! single scattering albedo: liquid
+    real(wp), dimension(:,:,:),   allocatable :: phaliq_sj   ! phase function moments: liquid
+    real(wp), dimension(:,:,:),   allocatable :: extice_sj   ! extinction efficiency: ice
+    real(wp), dimension(:,:,:),   allocatable :: ssaice_sj   ! single scattering albedo: ice
+    real(wp), dimension(:,:,:,:), allocatable :: phaice_sj   ! phase function moments: ice
+
+    real(wp), dimension(:,:), allocatable :: band_lims_wvn
+    ! -----------------
+    ! Open cloud optical property coefficient file
+    if(nf90_open(trim(cld_coeff_file), NF90_NOWRITE, ncid) /= NF90_NOERR) &
+       call stop_on_err("load_cld_lutcoeff_solarj(): can't open file " // trim(cld_coeff_file))
+
+    ! Read LUT coefficient dimensions
+    nband = get_dim_size(ncid,'nband')
+    nrghice   = get_dim_size(ncid,'nrghice')
+    nsize_liq = get_dim_size(ncid,'nsize_liq')
+    nsize_ice = get_dim_size(ncid,'nsize_ice')
+    nphase    = get_dim_size(ncid,'nphase')
+
+    ! Read LUT constants
+    radliq_lwr  = read_field(ncid, 'radliq_lwr_sj')
+    radliq_upr  = read_field(ncid, 'radliq_upr_sj')
+    diamice_lwr = read_field(ncid, 'diamice_lwr_sj')
+    diamice_upr = read_field(ncid, 'diamice_upr_sj')
+
+    ! Allocate cloud property lookup table input arrays
+    allocate(extliq_sj(nsize_liq, nband), &
+             ssaliq_sj(nsize_liq, nband), &
+             phaliq_sj(nphase, nsize_liq, nband), &
+             extice_sj(nsize_ice, nband, nrghice), &
+             ssaice_sj(nsize_ice, nband, nrghice), &
+             phaice_sj(nphase, nsize_ice, nband, nrghice))
+
+    ! Read LUT coefficients
+     extliq_sj = read_field(ncid, 'extliq_sj',  nsize_liq, nband)
+     ssaliq_sj = read_field(ncid, 'ssaliq_sj',  nsize_liq, nband)
+     phaliq_sj = read_field(ncid, 'phaliq_sj',  nphase, nsize_liq, nband)
+     extice_sj = read_field(ncid, 'extice_sj',  nsize_ice, nband, nrghice)
+     ssaice_sj = read_field(ncid, 'ssaice_sj',  nsize_ice, nband, nrghice)
+     phaice_sj = read_field(ncid, 'phaice_sj',  nphase, nsize_ice, nband, nrghice)
+
+    ! Read band wavenumber limits
+    allocate(band_lims_wvn(2, nband))
+    band_lims_wvn = read_field(ncid, 'bnd_limits_wavenumber', 2, nband)
+    call stop_on_err(cloud_spec%load(band_lims_wvn, &
+                                     radliq_lwr, radliq_upr, &
+                                     diamice_lwr, diamice_upr, &
+                                     extliq_sj, ssaliq_sj, phaliq_sj, &
+                                     extice_sj, ssaice_sj, phaice_sj))
+
+    ncid = nf90_close(ncid)
+  end subroutine load_cld_lutcoeff_solarj
 
   ! -----------------------------------------------------------------------------------
     subroutine stop_on_err(msg)
